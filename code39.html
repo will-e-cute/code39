@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Générateur de Codes-barres</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bwip-js@3.1.0/dist/bwip-js-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 20px auto; padding: 20px; background-color: #f8f8f8; }
+        .container { display: flex; flex-direction: column; align-items: center; }
+        .title { text-align: center; font-size: 28px; margin-bottom: 20px; color: #333; }
+        
+        .input-section { background-color: #ffffff; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input { margin: 10px; padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 5px; }
+        button { margin: 10px; padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #45a049; }
+        
+        .code-generation { background-color: #ffffff; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .code-generation > div { display: flex; justify-content: space-around; align-items: center; }
+        
+        .history-container { display: flex; gap: 30px; width: 100%; }
+        .history-column { flex: 1; background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .history-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .history-item span { flex: 1; margin-right: 10px; }
+        .history-item .center-content { display: flex; justify-content: center; flex: 2; }
+        .history-item canvas:last-child { margin-right: auto; }
+        
+        #tempCanvases { display: none; }
+        #currentDatamatrix { width: 80px; height: 80px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Générateur de Codes-barres</h1>
+        
+        <div class="input-section">
+            <input type="text" id="inputText" placeholder="Entrez le texte ici">
+            <button onclick="generateCodes()">Valider</button>
+            <button onclick="generatePDF()">Générer PDF Historique</button>
+        </div>
+        
+        <div class="code-generation">
+            <div>
+                <div>
+                    <h3>Code 39:</h3>
+                    <svg id="currentBarcode"></svg>
+                </div>
+                <div>
+                    <h3>Data Matrix:</h3>
+                    <canvas id="currentDatamatrix"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="history-container">
+            <div class="history-column">
+                <h3>Historique des Codes:</h3>
+                <div id="historyItems"></div>
+            </div>
+        </div>
+        
+        <div id="tempCanvases"></div>
+    </div>
+
+    <script>
+        let history = [];
+
+        function generateDataMatrix(canvas, text, options = {}) {
+            try {
+                bwipjs.toCanvas(canvas, {
+                    bcid: 'datamatrix',
+                    text: text,
+                    scale: options.scale || 3,
+                    height: options.height || 40,
+                    width: options.width || 40
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function generateCodes() {
+            const input = document.getElementById('inputText').value.trim().toUpperCase();
+            
+            if (!input || !/^[A-Z0-9\-\.\$\/\+\%\s]+$/.test(input)) {
+                alert("Entrée invalide pour Code39");
+                return;
+            }
+
+            document.getElementById('currentBarcode').innerHTML = '';
+            const currentDatamatrix = document.getElementById('currentDatamatrix');
+            currentDatamatrix.width = 80;
+            currentDatamatrix.height = 80;
+
+            JsBarcode("#currentBarcode", input, { 
+                format: "CODE39", 
+                width: 2, 
+                height: 80,
+                displayValue: false 
+            });
+
+            generateDataMatrix(currentDatamatrix, input);
+
+            history.push(input);
+            updateHistory();
+            document.getElementById('inputText').value = '';
+        }
+
+        function updateHistory() {
+            const historyItems = document.getElementById('historyItems');
+            historyItems.innerHTML = '';
+
+            history.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = item;
+                historyItem.appendChild(textSpan);
+
+                const centerContent = document.createElement('div');
+                centerContent.className = 'center-content';
+                const barcodeCanvas = document.createElement('canvas');
+                JsBarcode(barcodeCanvas, item, { 
+                    format: "CODE39", 
+                    width: 2, 
+                    height: 80,
+                    displayValue: false 
+                });
+                centerContent.appendChild(barcodeCanvas);
+                historyItem.appendChild(centerContent);
+
+                const dmCanvas = document.createElement('canvas');
+                dmCanvas.width = 40;
+                dmCanvas.height = 40;
+                generateDataMatrix(dmCanvas, item, {
+                    scale: 2,
+                    height: 20,
+                    width: 20
+                });
+                historyItem.appendChild(dmCanvas);
+
+                historyItems.appendChild(historyItem);
+            });
+        }
+
+        function generatePDF() {
+            if (history.length === 0) return alert("Historique vide !");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            let y = 20;
+
+            doc.setFontSize(16);
+            doc.text("Historique des Codes-barres", 10, 10);
+            doc.setFontSize(12);
+
+            const tempContainer = document.getElementById('tempCanvases');
+            
+            history.forEach((item, index) => {
+                if (y > 250) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                doc.text(item, 10, y + 5);
+
+                const code39Canvas = document.createElement('canvas');
+                JsBarcode(code39Canvas, item, { 
+                    format: "CODE39", 
+                    width: 1.5, 
+                    height: 30 
+                });
+                tempContainer.appendChild(code39Canvas);
+                
+                const dmCanvas = document.createElement('canvas');
+                generateDataMatrix(dmCanvas, item);
+                tempContainer.appendChild(dmCanvas);
+
+                doc.addImage(code39Canvas, 'PNG', 40, y, 80, 20);
+                doc.addImage(dmCanvas, 'PNG', 130, y, 20, 20);
+                
+                y += 30;
+            });
+
+            tempContainer.innerHTML = '';
+            doc.save('historique_codes.pdf');
+        }
+
+        document.getElementById('inputText').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') generateCodes();
+        });
+    </script>
+</body>
+</html>
